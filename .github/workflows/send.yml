@@ -36,9 +36,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements-dev.txt
-      - name: Verify recipient matching regressions
-        run: python -m pytest -q
       - run: python -m playwright install --with-deps chromium
+      - name: Verify recipient matching regressions
+        run: env -u DOUYIN_COOKIE -u DOUYIN_CONFIG python -m pytest -q
       - name: Write protected configuration
         shell: bash
         run: printf '%s' "$DOUYIN_CONFIG" > config.json
