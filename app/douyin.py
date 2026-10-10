@@ -305,8 +305,10 @@ _GROUP_COUNT_SUFFIX_RE_TEMPLATE = r"{name}\s*[\(（]\s*\d+\s*[\)）]"
 
 
 def _group_count_suffix_matches(actual: str, expected: str) -> bool:
-    actual = actual.strip()
-    expected = expected.strip()
+    # Douyin renders NBSP inside names and line breaks before member counts.
+    # Normalize whitespace only here; keep strict friend-name matching unchanged.
+    actual = " ".join(actual.split())
+    expected = " ".join(expected.split())
     if actual == expected:
         return True
     pattern = _GROUP_COUNT_SUFFIX_RE_TEMPLATE.format(name=re.escape(expected))
@@ -332,3 +334,4 @@ async def first_visible(page: Page, selectors: tuple[str, ...], timeout_ms: int 
         except Exception:
             continue
     raise PageOperationError(f"找不到页面元素，已尝试: {', '.join(selectors)}")
+
