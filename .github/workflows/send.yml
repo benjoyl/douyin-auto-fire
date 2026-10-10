@@ -8,8 +8,8 @@ on:
         type: boolean
         default: true
   # 09:00 Asia/Shanghai = 01:00 UTC
-  schedule:
-    - cron: "0 1 * * *"
+  # schedule:
+  #   - cron: "0 1 * * *"
 
 concurrency:
   group: douyin-daily-sender
