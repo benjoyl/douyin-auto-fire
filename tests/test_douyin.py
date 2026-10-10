@@ -447,3 +447,21 @@ def test_group_count_suffix_matches_escapes_expected_regex_meta() -> None:
 # Suppress the unused `re` import warning the linter may raise for the
 # pure-assertion block above; `re` is intentionally kept as a sanity anchor.
 _ = re
+
+
+def test_group_count_suffix_normalizes_rendered_nonbreaking_space_and_linebreak():
+    assert _group_count_suffix_matches("jk（ikun）,\u00a0benjoyl\n(2)", "jk（ikun）, benjoyl")
+    assert not _group_count_suffix_matches("jk（ikun）,\u00a0benjoyl2\n(2)", "jk（ikun）, benjoyl")
+
+
+@pytest.mark.asyncio
+async def test_search_result_handles_rendered_group_whitespace():
+    page, buttons = _search_page(["jk（ikun）,\u00a0benjoyl\n(2)"])
+    assert await DouyinChat(page)._search_result("jk（ikun）, benjoyl") is buttons[0]
+
+
+@pytest.mark.asyncio
+async def test_group_header_handles_rendered_nonbreaking_space():
+    page = _chat_page("jk（ikun）,\u00a0benjoyl(2)")
+    assert await DouyinChat(page)._chat_open_error("jk（ikun）, benjoyl") is None
+
