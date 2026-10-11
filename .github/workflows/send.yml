@@ -166,7 +166,6 @@ jobs:
             python run.py
           fi
       - name: Upload diagnostics
-        if: steps.daily_gate.outputs.proceed == 'true'
         if: failure()
         uses: actions/upload-artifact@v4
         with:
