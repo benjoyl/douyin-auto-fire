@@ -10,6 +10,9 @@ on:
   # 09:00 Asia/Shanghai = 01:00 UTC
   schedule:
     - cron: "0 1 * * *"
+    # Fallback triggers if GitHub never starts the primary run.
+    - cron: "17,47 1 * * *"
+    - cron: "17 2,3 * * *"
 
 concurrency:
   group: douyin-daily-sender
@@ -21,6 +24,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      actions: read
     env:
       DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
       DOUYIN_CONFIG: ${{ secrets.DOUYIN_CONFIG }}
@@ -31,18 +35,60 @@ jobs:
       WEBHOOK_TEMPLATE: ${{ secrets.WEBHOOK_TEMPLATE }}
       HEADLESS: "true"
     steps:
+      - name: Avoid duplicate scheduled attempts
+        id: daily_gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api "repos/${{ github.repository }}/actions/workflows/send.yml/runs?event=schedule&per_page=100" > /tmp/douyin-scheduled-runs.json
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          zone = ZoneInfo("Asia/Shanghai")
+          today = datetime.now(zone).date()
+          current_id = int(os.environ["GITHUB_RUN_ID"])
+          runs = json.load(open("/tmp/douyin-scheduled-runs.json"))["workflow_runs"]
+          previous = [
+              run for run in runs
+              if run["id"] < current_id
+              and datetime.fromisoformat(run["created_at"].replace("Z", "+00:00")).astimezone(zone).date() == today
+          ]
+          proceed = not previous
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"proceed={str(proceed).lower()}\n")
+          if previous:
+              print("Earlier scheduled attempt exists today; skipping to avoid duplicate messages.")
+              print("A failed earlier send needs manual repair; this guard does not claim delivery.")
+          else:
+              print("First scheduled attempt today; continue with the configured recipients.")
+          PY
       - uses: actions/checkout@v4
+        if: steps.daily_gate.outputs.proceed == 'true'
       - uses: actions/setup-python@v5
+        if: steps.daily_gate.outputs.proceed == 'true'
         with:
           python-version: "3.11"
       - run: pip install -r requirements-dev.txt
+        if: steps.daily_gate.outputs.proceed == 'true'
       - run: python -m playwright install --with-deps chromium
+        if: steps.daily_gate.outputs.proceed == 'true'
       - name: Verify recipient matching regressions
+        if: steps.daily_gate.outputs.proceed == 'true'
         run: env -u DOUYIN_COOKIE -u DOUYIN_CONFIG python -m pytest -q
       - name: Write protected configuration
+        if: steps.daily_gate.outputs.proceed == 'true'
         shell: bash
         run: printf '%s' "$DOUYIN_CONFIG" > config.json
       - name: Write multi-account configuration
+        if: steps.daily_gate.outputs.proceed == 'true'
         shell: bash
         env:
           COOKIE_1: ${{ secrets.DOUYIN_COOKIE_ACCOUNT1 }}
@@ -111,6 +157,7 @@ jobs:
           )
           PY
       - name: Run
+        if: steps.daily_gate.outputs.proceed == 'true'
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
@@ -119,10 +166,12 @@ jobs:
             python run.py
           fi
       - name: Upload diagnostics
+        if: steps.daily_gate.outputs.proceed == 'true'
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: douyin-failure-${{ github.run_id }}
           path: artifacts/
           retention-days: 3
+
 
